@@ -1,0 +1,58 @@
+package com.wishessender.controller;
+
+import com.wishessender.service.ReminderScheduler;
+import com.wishessender.util.Auth;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.bind.annotation.*;
+
+import javax.servlet.http.HttpSession;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
+/** In-app notifications created by the reminder scheduler. */
+@RestController
+@RequestMapping("/api/notifications")
+public class NotificationController {
+
+    private final JdbcTemplate jdbc;
+    private final ReminderScheduler scheduler;
+
+    public NotificationController(JdbcTemplate jdbc, ReminderScheduler scheduler) {
+        this.jdbc = jdbc;
+        this.scheduler = scheduler;
+    }
+
+    @GetMapping
+    public List<Map<String, Object>> list(HttpSession session) {
+        return jdbc.queryForList(
+            "SELECT n.*, e.connection_id, e.event_type " +
+            "FROM notifications n JOIN events e ON e.id = n.event_id " +
+            "WHERE n.user_id = ? ORDER BY n.created_at DESC LIMIT 50",
+            Auth.userId(session));
+    }
+
+    @GetMapping("/unread-count")
+    public Map<String, Object> unreadCount(HttpSession session) {
+        Integer count = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0", Integer.class, Auth.userId(session));
+        return Collections.singletonMap("count", count);
+    }
+
+    @PostMapping("/{id}/read")
+    public void markRead(@PathVariable int id, HttpSession session) {
+        jdbc.update("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?", id, Auth.userId(session));
+    }
+
+    @PostMapping("/read-all")
+    public void markAllRead(HttpSession session) {
+        jdbc.update("UPDATE notifications SET is_read = 1 WHERE user_id = ?", Auth.userId(session));
+    }
+
+    /** Runs the scheduler right now (handy for the demo instead of waiting 1 minute). */
+    @PostMapping("/check-now")
+    public Map<String, Object> checkNow(HttpSession session) {
+        Auth.userId(session);
+        return Collections.singletonMap("created", scheduler.checkReminders());
+    }
+}
