@@ -76,7 +76,8 @@
     document.getElementById('users').innerHTML =
       '<tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Connections</th><th></th></tr>' +
       list.map(u => '<tr><td>' + u.id + '</td><td>' + esc(u.name) + '</td><td>' + esc(u.email) + '</td>' +
-        '<td><span class="tag">' + u.role + '</span></td><td>' + u.connections + '</td><td>' +
+        '<td><span class="tag">' + u.role + '</span></td>' +
+        '<td><a href="connections.html?scope=all&userId=' + u.id + '">' + u.connections + '</a></td><td>' +
         (u.role === 'ADMIN' ? '' : '<button class="btn-small btn-outline" onclick="del(\'users\',' + u.id + ')">Delete</button>') +
         '</td></tr>').join('');
   }

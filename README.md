@@ -1,4 +1,4 @@
-﻿# WishesSender v1.1 (MVP)
+﻿# WishesSender v1.2 (MVP)
 
 **A smart special-day reminder, wish and gift suggestion system.**
 CSE 224 – Database Management System Lab project.
@@ -17,11 +17,11 @@ CSE 224 – Database Management System Lab project.
 | Module | What you can do |
 |---|---|
 | Registration & Login | Register, log in, log out. Passwords are BCrypt-hashed. |
-| Connections | Add / edit / delete / search people, filter by relation (Family, Friend, ...). |
+| Connections | Add / edit / delete / search people, filter by relation (Family, Friend, ...). **Connections** page: all your connections in a table, filter by relation, religion, gender. |
 | Events | Birthday is created automatically from date of birth. Add anniversaries, festivals, custom events. |
 | Festival list | Upcoming festivals, suggested to each person by religion, one click to add. |
 | Reminder scheduler | Background job runs every minute and creates in-app reminders (on the day + N days before). |
-| Reminders page | Notification inbox, unread badge, "Run scheduler now" button for the demo, event filters. |
+| Reminders page | Notification inbox, unread badge, "Run scheduler now" button for the demo, event filters. "Mark all read" clears the list; sending a wish for an event clears its reminder ("Show cleared" to see them again). |
 | Wish Studio | Pick person, occasion, tone and language → Gemini writes the wish → edit, copy, save, mark as sent. |
 | Template fallback | If AI is off, no API key, or the call fails, a wish template from the DB is used. |
 | Gift suggestions | Gifts matched by budget, event type and interests, with a "Why this gift?" reason. |
@@ -29,7 +29,7 @@ CSE 224 – Database Management System Lab project.
 | Dashboard | Today's celebrations, next 30 days, stats, recent wishes. |
 | Insights | Reports from SQL views + CSV export + Print/PDF. |
 | Settings | Name, AI on/off, share interests with AI on/off, how many days before to remind. |
-| Admin panel | Platform stats, users list, manage gift catalog and festivals. |
+| Admin panel | Platform stats, users list, manage gift catalog and festivals. Admin sidebar: **People** (all registered users) and **Connections** (all connections, filter by person, religion, gender). |
 
 **Not in v1 (planned for v2):** subscription plans, calendar month view, AI "why this gift" text,
 custom reminder times, Spring Security.
@@ -106,11 +106,13 @@ Then open **<http://localhost:8085>**.
    (any year), add interests like `books, music`.
 3. Their profile opens: birthday event already created, gift ideas, suggested festivals (click one to add it).
 4. **Reminders → Run scheduler now** – a reminder appears and the 🔔 badge updates.
-5. **Home** shows the person under *Today's Celebration* → **Send Wish**.
-6. **Wish Studio** – choose a tone → *Generate* → edit → *Mark as sent*.
-7. **Insights** – charts from SQL views, export CSV.
-8. **Settings** – turn AI off and generate again → template wish is used.
-9. Log out, log in as **admin** → **Admin** page: stats, users, add a gift / festival.
+5. **Home** shows the person under *Today's Celebration* → **Send Wish** (or *Send wish* on the reminder).
+6. **Wish Studio** – choose a tone → *Generate* → edit → *Mark as sent* → "Reminder cleared", the 🔔 badge drops.
+7. **Connections** – all your connections in one table; filter by religion / gender.
+8. **Insights** – charts from SQL views, export CSV.
+9. **Settings** – turn AI off and generate again → template wish is used.
+10. Log out, log in as **admin** → **Admin** page: stats, users, add a gift / festival.
+11. Admin sidebar → **People** (all users) → *Connections* on a user → filter by religion / gender.
 
 ---
 
@@ -144,8 +146,9 @@ wishes-sender-v1
         ├── schema.sql                       9 tables + 4 views + constraints
         ├── data.sql                         festivals, templates, gift catalog
         └── static/                          the website (HTML/CSS/JS)
-            ├── index.html  home.html  people.html  person.html  wish.html
-            ├── reminders.html  festivals.html  insights.html  settings.html  admin.html
+            ├── index.html  home.html  people.html  person.html  connections.html  wish.html
+            ├── reminders.html  festivals.html  insights.html  settings.html
+            ├── admin.html  admin-people.html            (admin only)
             ├── css/style.css
             └── js/app.js                    api() helper + shared functions
 ```
@@ -201,9 +204,9 @@ The scheduler is a single SQL statement:
 
 ---
 
-## 9. Upgrading from v1.0.0
+## 9. Upgrading from v1.0.0 / v1.1.0
 
-v1.1.0 changes the database design (see `CHANGELOG.md`). Your data is upgraded **automatically** on the
+v1.1.0 changed the database design and v1.2.0 adds `notifications.is_cleared` (see `CHANGELOG.md`). Your data is upgraded **automatically** on the
 first start – look for `[migration] ...` lines in the console. Take a backup first:
 
 ```powershell

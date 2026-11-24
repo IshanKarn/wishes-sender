@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import javax.servlet.http.HttpSession;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,9 +41,35 @@ public class AdminController {
     public List<Map<String, Object>> users(HttpSession session) {
         Auth.requireAdmin(session);
         return jdbc.queryForList(
-            "SELECT u.id, u.name, u.email, u.role, u.created_at, COUNT(c.id) AS connections " +
-            "FROM users u LEFT JOIN connections c ON c.user_id = u.id " +
-            "GROUP BY u.id, u.name, u.email, u.role, u.created_at ORDER BY u.id");
+            "SELECT u.id, u.name, u.email, u.role, u.created_at, " +
+            "  (SELECT COUNT(*) FROM connections c WHERE c.user_id = u.id) AS connections, " +
+            "  (SELECT COUNT(*) FROM events e JOIN connections c ON c.id = e.connection_id WHERE c.user_id = u.id) AS events, " +
+            "  (SELECT COUNT(*) FROM wishes w JOIN connections c ON c.id = w.connection_id WHERE c.user_id = u.id) AS wishes " +
+            "FROM users u ORDER BY u.id");
+    }
+
+    /**
+     * All connections of all users (admin "Connections" page).
+     * Filters: userId (0 = everybody), q (name search), relation, religion, gender
+     * (empty = no filter, "NONE" = not set).
+     */
+    @GetMapping("/connections")
+    public List<Map<String, Object>> connections(@RequestParam(defaultValue = "0") int userId,
+                                                 @RequestParam(defaultValue = "") String q,
+                                                 @RequestParam(defaultValue = "") String relation,
+                                                 @RequestParam(defaultValue = "") String religion,
+                                                 @RequestParam(defaultValue = "") String gender,
+                                                 HttpSession session) {
+        Auth.requireAdmin(session);
+        String sql =
+            "SELECT c.*, b.event_date AS dob, u.name AS owner_name, u.email AS owner_email, " +
+            ConnectionController.NEXT_IN_DAYS + " FROM connections c " +
+            "JOIN users u ON u.id = c.user_id " +
+            "LEFT JOIN events b ON b.connection_id = c.id AND b.event_type = 'BIRTHDAY' " +
+            "WHERE (? = 0 OR c.user_id = ?)" + ConnectionController.FILTERS + "ORDER BY u.name, c.name";
+        List<Object> args = new ArrayList<>(Arrays.asList(userId, userId));
+        args.addAll(Arrays.asList(ConnectionController.filterArgs(q, relation, religion, gender)));
+        return jdbc.queryForList(sql, args.toArray());
     }
 
     @DeleteMapping("/users/{id}")

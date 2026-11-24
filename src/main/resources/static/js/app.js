@@ -85,17 +85,26 @@ async function loadLayout(active) {
   const links = [
     ['home', 'home.html', '🏠 Home'],
     ['people', 'people.html', '👥 People'],
+    ['connections', 'connections.html', '🔗 Connections'],
     ['wish', 'wish.html', '✍️ Wish Studio'],
     ['reminders', 'reminders.html', '🔔 Reminders' + (unread.count ? '<span class="badge">' + unread.count + '</span>' : '')],
     ['festivals', 'festivals.html', '🎉 Festivals'],
     ['insights', 'insights.html', '📊 Insights'],
     ['settings', 'settings.html', '⚙️ Settings'],
   ];
-  if (me.role === 'ADMIN') links.push(['admin', 'admin.html', '🛡️ Admin']);
+  // Admin section: platform-wide pages (all users)
+  const adminLinks = [
+    ['admin', 'admin.html', '🛡️ Admin'],
+    ['admin-people', 'admin-people.html', '🧑‍🤝‍🧑 People'],
+    ['admin-connections', 'connections.html?scope=all', '🌐 Connections'],
+  ];
 
+  const link = ([key, href, label]) =>
+    '<a href="' + href + '" class="' + (key === active ? 'active' : '') + '">' + label + '</a>';
   let html = '<div class="logo">Wishes<span>Sender</span></div>';
-  for (const [key, href, label] of links) {
-    html += '<a href="' + href + '" class="' + (key === active ? 'active' : '') + '">' + label + '</a>';
+  html += links.map(link).join('');
+  if (me.role === 'ADMIN') {
+    html += '<div class="nav-section">Admin</div>' + adminLinks.map(link).join('');
   }
   html += '<a href="#" onclick="logout()">🚪 Logout</a>';
   document.getElementById('sidebar').innerHTML = html;

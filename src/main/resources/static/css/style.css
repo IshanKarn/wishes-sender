@@ -51,6 +51,13 @@ h2 { font-size: 19px; }
   color: var(--muted);
 }
 .sidebar a:hover, .sidebar a.active { background: rgba(139, 92, 246, 0.2); color: var(--text); }
+.sidebar .nav-section {
+  margin: 16px 12px 6px; font-size: 11px; letter-spacing: 1px;
+  text-transform: uppercase; color: var(--muted); border-top: 1px solid var(--border); padding-top: 12px;
+}
+.filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+.filters > div { flex: 1; min-width: 150px; }
+.table-wrap { overflow-x: auto; }
 .badge {
   background: var(--coral); color: white; border-radius: 10px;
   padding: 1px 7px; font-size: 12px; margin-left: 6px;
@@ -188,6 +195,7 @@ th { color: var(--muted); font-weight: normal; }
   .layout { flex-direction: column; }
   .sidebar { width: 100%; min-height: auto; position: static; display: flex; flex-wrap: wrap; padding: 10px; }
   .sidebar .logo { width: 100%; margin-bottom: 8px; }
+  .sidebar .nav-section { width: 100%; margin: 8px 0 4px; padding-top: 8px; }
   .sidebar a { padding: 6px 10px; font-size: 13px; }
   .grid-2 { grid-template-columns: 1fr; }
   main { padding: 16px; }

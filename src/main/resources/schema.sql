@@ -96,11 +96,15 @@ CREATE TABLE IF NOT EXISTS notifications (
     days_before INT          NOT NULL,
     message     VARCHAR(255) NOT NULL,
     is_read     TINYINT(1)   NOT NULL DEFAULT 0,
+    -- 1 = removed from the reminders list ("Mark all read" or a wish was sent for the event).
+    -- The row is kept (not deleted) so the UNIQUE key stops the scheduler from creating it again.
+    is_cleared  TINYINT(1)   NOT NULL DEFAULT 0,
     created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
     UNIQUE KEY uq_notification (event_id, for_date, days_before),  -- never remind twice
-    CONSTRAINT chk_notif_days CHECK (days_before BETWEEN 0 AND 30),
-    CONSTRAINT chk_notif_read CHECK (is_read IN (0, 1))
+    CONSTRAINT chk_notif_days    CHECK (days_before BETWEEN 0 AND 30),
+    CONSTRAINT chk_notif_read    CHECK (is_read IN (0, 1)),
+    CONSTRAINT chk_notif_cleared CHECK (is_cleared IN (0, 1))
 );
 
 -- 7. Wish templates (used when AI is off or fails)

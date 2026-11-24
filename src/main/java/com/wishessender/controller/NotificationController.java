@@ -27,12 +27,17 @@ public class NotificationController {
         this.scheduler = scheduler;
     }
 
+    /**
+     * The reminders list. Cleared reminders ("Mark all read", or a wish was sent for the event)
+     * are hidden; ?includeCleared=true shows them too (history).
+     */
     @GetMapping
-    public List<Map<String, Object>> list(HttpSession session) {
+    public List<Map<String, Object>> list(@RequestParam(defaultValue = "false") boolean includeCleared,
+                                          HttpSession session) {
         return jdbc.queryForList(
             "SELECT n.*, c.user_id, e.connection_id, e.event_type FROM notifications n" + OWNER +
-            "WHERE c.user_id = ? ORDER BY n.created_at DESC, n.id DESC LIMIT 50",
-            Auth.userId(session));
+            "WHERE c.user_id = ? AND (? OR n.is_cleared = 0) ORDER BY n.created_at DESC, n.id DESC LIMIT 50",
+            Auth.userId(session), includeCleared);
     }
 
     @GetMapping("/unread-count")
@@ -49,9 +54,12 @@ public class NotificationController {
                     id, Auth.userId(session));
     }
 
+    /** "Mark all read": marks every reminder read AND removes them from the reminders list. */
     @PostMapping("/read-all")
-    public void markAllRead(HttpSession session) {
-        jdbc.update("UPDATE notifications n" + OWNER + "SET n.is_read = 1 WHERE c.user_id = ?", Auth.userId(session));
+    public Map<String, Object> markAllRead(HttpSession session) {
+        int cleared = jdbc.update("UPDATE notifications n" + OWNER + "SET n.is_read = 1, n.is_cleared = 1 " +
+                                  "WHERE c.user_id = ? AND n.is_cleared = 0", Auth.userId(session));
+        return Collections.singletonMap("cleared", cleared);
     }
 
     /** Runs the scheduler right now (handy for the demo instead of waiting 1 minute). */

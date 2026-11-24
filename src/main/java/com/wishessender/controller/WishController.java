@@ -1,6 +1,7 @@
 package com.wishessender.controller;
 
 import com.wishessender.service.GeminiService;
+import com.wishessender.service.ReminderScheduler;
 import com.wishessender.util.Auth;
 import com.wishessender.util.Db;
 import com.wishessender.util.Rules;
@@ -19,10 +20,12 @@ public class WishController {
 
     private final JdbcTemplate jdbc;
     private final GeminiService gemini;
+    private final ReminderScheduler reminders;
 
-    public WishController(JdbcTemplate jdbc, GeminiService gemini) {
+    public WishController(JdbcTemplate jdbc, GeminiService gemini, ReminderScheduler reminders) {
         this.jdbc = jdbc;
         this.gemini = gemini;
+        this.reminders = reminders;
     }
 
     /** Body: { connectionId, eventId (optional), tone, language } */
@@ -107,6 +110,7 @@ public class WishController {
         }
 
         // No user_id column: the owner of a wish is the owner of its connection
+        String status = Rules.oneOf(orDefault(b, "status", "SAVED"), Rules.WISH_STATUSES, "status");
         int id = Db.insert(jdbc,
             "INSERT INTO wishes (connection_id, event_id, tone, language, text, source, status) VALUES (?,?,?,?,?,?,?)",
             connectionId, eventId,
@@ -114,9 +118,15 @@ public class WishController {
             Rules.oneOf(Db.str(b, "language"), Rules.LANGUAGES, "language"),
             Db.required(b, "text"),
             Rules.oneOf(orDefault(b, "source", "TEMPLATE"), Rules.WISH_SOURCES, "source"),
-            Rules.oneOf(orDefault(b, "status", "SAVED"), Rules.WISH_STATUSES, "status"));
-        return Db.one(jdbc, "SELECT w.*, c.user_id FROM wishes w JOIN connections c ON c.id = w.connection_id " +
-                            "WHERE w.id = ?", id);
+            status);
+
+        // A wish sent for an event clears that event's reminders from the reminders list
+        int cleared = (eventId != null && status.equals("SENT")) ? reminders.clearForEvent(eventId, userId) : 0;
+
+        Map<String, Object> wish = new HashMap<>(Db.one(jdbc,
+            "SELECT w.*, c.user_id FROM wishes w JOIN connections c ON c.id = w.connection_id WHERE w.id = ?", id));
+        wish.put("remindersCleared", cleared);
+        return wish;
     }
 
     /** Wish history. Optional ?connectionId= to show one person's wishes. */
@@ -130,11 +140,17 @@ public class WishController {
             Auth.userId(session), connectionId, connectionId);
     }
 
-    /** Mark a saved wish as sent. */
+    /** Mark a saved wish as sent (also clears the reminders of its event, if it has one). */
     @PostMapping("/{id}/sent")
     public void markSent(@PathVariable int id, HttpSession session) {
-        jdbc.update("UPDATE wishes w JOIN connections c ON c.id = w.connection_id SET w.status = 'SENT' " +
-                    "WHERE w.id = ? AND c.user_id = ?", id, Auth.userId(session));
+        int userId = Auth.userId(session);
+        int updated = jdbc.update("UPDATE wishes w JOIN connections c ON c.id = w.connection_id SET w.status = 'SENT' " +
+                                  "WHERE w.id = ? AND c.user_id = ?", id, userId);
+        if (updated > 0) {
+            List<Integer> eventIds = jdbc.queryForList(
+                "SELECT event_id FROM wishes WHERE id = ? AND event_id IS NOT NULL", Integer.class, id);
+            if (!eventIds.isEmpty()) reminders.clearForEvent(eventIds.get(0), userId);
+        }
     }
 
     /** Text value from the body, or the default when it is missing/empty. */

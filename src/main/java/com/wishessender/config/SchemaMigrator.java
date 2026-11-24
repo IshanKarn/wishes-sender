@@ -10,7 +10,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Upgrades a database created by v1.0 to the v1.1 design (see docs/CHANGE_REQUEST_CR-001.md).
+ * Upgrades a database created by v1.0 / v1.1 to the current design
+ * (see docs/CHANGE_REQUEST_CR-001.md and CHANGELOG.md).
  *
  * schema.sql only uses CREATE TABLE IF NOT EXISTS, so it never changes a table that already
  * exists. This class runs right after schema.sql + data.sql (and before the web server and the
@@ -35,7 +36,16 @@ public class SchemaMigrator implements InitializingBean {
         linkEventTypes();          // change 3
         keepBirthdayOnlyInEvents();// change 6
         makeConnectionsUnique();   // change 5b
+        addNotificationCleared();  // v1.2: clear reminders
         addCheckConstraints();     // changes 2 and 4
+    }
+
+    // ---------------------------------------------------------------- v1.2
+    private void addNotificationCleared() {
+        if (!columnExists("notifications", "is_cleared")) {
+            jdbc.execute("ALTER TABLE notifications ADD COLUMN is_cleared TINYINT(1) NOT NULL DEFAULT 0 AFTER is_read");
+            log("notifications.is_cleared added");
+        }
     }
 
     // ---------------------------------------------------------------- change 5a
@@ -220,6 +230,9 @@ public class SchemaMigrator implements InitializingBean {
         if (!constraintExists("notifications", "chk_notif_read")) {
             jdbc.update("UPDATE notifications SET is_read = 1 WHERE is_read NOT IN (0, 1)");
             addCheck("notifications", "chk_notif_read", "is_read IN (0, 1)");
+        }
+        if (!constraintExists("notifications", "chk_notif_cleared")) {
+            addCheck("notifications", "chk_notif_cleared", "is_cleared IN (0, 1)");
         }
 
         // ----- wish templates and wishes

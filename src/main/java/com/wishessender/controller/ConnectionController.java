@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import javax.servlet.http.HttpSession;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -22,9 +24,26 @@ public class ConnectionController {
      * The date of birth is not a column of connections any more: it is the BIRTHDAY event.
      * This SELECT adds it back as "dob", so the API looks the same as in v1.0.
      */
-    private static final String SELECT_CONNECTION =
+    static final String SELECT_CONNECTION =
         "SELECT c.*, b.event_date AS dob FROM connections c " +
         "LEFT JOIN events b ON b.connection_id = c.id AND b.event_type = 'BIRTHDAY' ";
+
+    /** Days to the person's next event (used in the lists). */
+    static final String NEXT_IN_DAYS =
+        "(SELECT MIN(v.days_left) FROM v_event_next v WHERE v.connection_id = c.id AND v.days_left >= 0) AS next_in_days";
+
+    /**
+     * Search / filter conditions shared with the admin list. Empty value = no filter.
+     * religion / gender = "NONE" finds people where it is not set.
+     */
+    static final String FILTERS =
+        " AND c.name LIKE ? AND (? = '' OR c.relation = ?)" +
+        " AND (? = '' OR (? = 'NONE' AND c.religion IS NULL) OR c.religion = ?)" +
+        " AND (? = '' OR (? = 'NONE' AND c.gender IS NULL) OR c.gender = ?) ";
+
+    static Object[] filterArgs(String q, String relation, String religion, String gender) {
+        return new Object[]{"%" + q.trim() + "%", relation, relation, religion, religion, religion, gender, gender, gender};
+    }
 
     private final JdbcTemplate jdbc;
 
@@ -32,20 +51,25 @@ public class ConnectionController {
         this.jdbc = jdbc;
     }
 
-    /** List with optional search text (q) and relation filter. Also returns days to the next event. */
+    /**
+     * The user's connections, with optional search text (q) and relation / religion / gender filters.
+     * Also returns days to the next event.
+     */
     @GetMapping
     public List<Map<String, Object>> list(@RequestParam(defaultValue = "") String q,
                                           @RequestParam(defaultValue = "") String relation,
+                                          @RequestParam(defaultValue = "") String religion,
+                                          @RequestParam(defaultValue = "") String gender,
                                           HttpSession session) {
         int userId = Auth.userId(session);
         String sql =
-            "SELECT x.*, " +
-            "  (SELECT MIN(v.days_left) FROM v_event_next v " +
-            "   WHERE v.connection_id = x.id AND v.days_left >= 0) AS next_in_days " +
-            "FROM (" + SELECT_CONNECTION +
-            "      WHERE c.user_id = ? AND c.name LIKE ? AND (? = '' OR c.relation = ?)) x " +
-            "ORDER BY x.name";
-        return jdbc.queryForList(sql, userId, "%" + q + "%", relation, relation);
+            "SELECT c.*, b.event_date AS dob, " + NEXT_IN_DAYS + " FROM connections c " +
+            "LEFT JOIN events b ON b.connection_id = c.id AND b.event_type = 'BIRTHDAY' " +
+            "WHERE c.user_id = ?" + FILTERS + "ORDER BY c.name";
+        List<Object> args = new ArrayList<>();
+        args.add(userId);
+        args.addAll(Arrays.asList(filterArgs(q, relation, religion, gender)));
+        return jdbc.queryForList(sql, args.toArray());
     }
 
     @GetMapping("/{id}")

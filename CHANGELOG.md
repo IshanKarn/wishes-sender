@@ -2,6 +2,36 @@
 
 All notable changes to WishesSender. Format: [Keep a Changelog](https://keepachangelog.com/), versions: [SemVer](https://semver.org/).
 
+## [1.2.0] – 2026-11-24
+
+Connections overview pages, admin People / Connections, and reminder clearing.
+**No breaking API changes.** v1.0 / v1.1 databases are upgraded automatically on start.
+
+### Added
+- **Connections page** (`connections.html`, sidebar "🔗 Connections") – every user sees all their connections in
+  one table with search and Relation / Religion / Gender filters ("Not set" finds empty values).
+- **Admin sidebar section** with "🧑‍🤝‍🧑 People" and "🌐 Connections":
+  - `admin-people.html` – all registered people with their connections, events and wishes counts, search,
+    a *Connections* button per person and delete.
+  - `connections.html?scope=all` – all connections of all users, filterable by **People** (owner), religion,
+    gender, relation and name. The admin dashboard's user table links to it too.
+- `GET /api/admin/connections?userId=&q=&relation=&religion=&gender=` (admin only).
+- `GET /api/connections` accepts optional `religion` and `gender` filters (`NONE` = not set).
+- `GET /api/admin/users` also returns `events` and `wishes` counts.
+- `notifications.is_cleared` column (+ CHECK `chk_notif_cleared`) – added to old databases by `SchemaMigrator`.
+- `GET /api/notifications?includeCleared=true` and a "Show cleared reminders" box on the Reminders page.
+
+### Changed
+- **Mark all read** now also clears every reminder from the Reminders list (toast shows how many);
+  `POST /api/notifications/read-all` returns `{ "cleared": n }` (was an empty body).
+- **Sending a wish for an event clears that event's reminder** – both *Mark as sent* in Wish Studio
+  (`POST /api/wishes` with `status: SENT` and an `eventId`) and `POST /api/wishes/{id}/sent`.
+  `POST /api/wishes` returns an extra `remindersCleared` field; Wish Studio shows "Reminder cleared"
+  and refreshes the 🔔 badge. Saving a wish (status SAVED) or a general wish clears nothing.
+- `GET /api/notifications` hides cleared reminders by default. Cleared rows are kept, so the scheduler does not
+  create the same reminder again; next year's occurrence is reminded as usual.
+- Wish Studio shows an error toast if saving fails.
+
 ## [1.1.0] – 2026-11-24
 
 Database normalisation and data-integrity fixes – see [docs/CHANGE_REQUEST_CR-001.md](docs/CHANGE_REQUEST_CR-001.md).

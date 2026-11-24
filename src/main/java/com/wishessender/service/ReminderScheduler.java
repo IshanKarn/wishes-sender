@@ -36,4 +36,17 @@ public class ReminderScheduler {
         }
         return created;
     }
+
+    /**
+     * A wish was sent for this event: its reminders are done, so they are marked read and
+     * removed from the user's reminders list. (Rows are kept, so the scheduler will not
+     * create them again; next year's occurrence has a new for_date and is reminded as usual.)
+     * Returns how many reminders were cleared.
+     */
+    public int clearForEvent(int eventId, int userId) {
+        return jdbc.update(
+            "UPDATE notifications n JOIN events e ON e.id = n.event_id JOIN connections c ON c.id = e.connection_id " +
+            "SET n.is_read = 1, n.is_cleared = 1 WHERE n.event_id = ? AND c.user_id = ? AND n.is_cleared = 0",
+            eventId, userId);
+    }
 }
