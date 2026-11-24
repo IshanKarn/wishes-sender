@@ -15,6 +15,10 @@ import java.util.Map;
 @RequestMapping("/api/notifications")
 public class NotificationController {
 
+    /** A notification has no user_id column: its owner is found through event -> connection. */
+    private static final String OWNER =
+        " JOIN events e ON e.id = n.event_id JOIN connections c ON c.id = e.connection_id ";
+
     private final JdbcTemplate jdbc;
     private final ReminderScheduler scheduler;
 
@@ -26,27 +30,28 @@ public class NotificationController {
     @GetMapping
     public List<Map<String, Object>> list(HttpSession session) {
         return jdbc.queryForList(
-            "SELECT n.*, e.connection_id, e.event_type " +
-            "FROM notifications n JOIN events e ON e.id = n.event_id " +
-            "WHERE n.user_id = ? ORDER BY n.created_at DESC LIMIT 50",
+            "SELECT n.*, c.user_id, e.connection_id, e.event_type FROM notifications n" + OWNER +
+            "WHERE c.user_id = ? ORDER BY n.created_at DESC, n.id DESC LIMIT 50",
             Auth.userId(session));
     }
 
     @GetMapping("/unread-count")
     public Map<String, Object> unreadCount(HttpSession session) {
         Integer count = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0", Integer.class, Auth.userId(session));
+            "SELECT COUNT(*) FROM notifications n" + OWNER + "WHERE c.user_id = ? AND n.is_read = 0",
+            Integer.class, Auth.userId(session));
         return Collections.singletonMap("count", count);
     }
 
     @PostMapping("/{id}/read")
     public void markRead(@PathVariable int id, HttpSession session) {
-        jdbc.update("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?", id, Auth.userId(session));
+        jdbc.update("UPDATE notifications n" + OWNER + "SET n.is_read = 1 WHERE n.id = ? AND c.user_id = ?",
+                    id, Auth.userId(session));
     }
 
     @PostMapping("/read-all")
     public void markAllRead(HttpSession session) {
-        jdbc.update("UPDATE notifications SET is_read = 1 WHERE user_id = ?", Auth.userId(session));
+        jdbc.update("UPDATE notifications n" + OWNER + "SET n.is_read = 1 WHERE c.user_id = ?", Auth.userId(session));
     }
 
     /** Runs the scheduler right now (handy for the demo instead of waiting 1 minute). */

@@ -34,10 +34,11 @@ public class DashboardController {
         data.put("totalEvents", jdbc.queryForObject(
             "SELECT COUNT(*) FROM v_event_next WHERE user_id = ?", Integer.class, userId));
         data.put("wishesSent", jdbc.queryForObject(
-            "SELECT COUNT(*) FROM wishes WHERE user_id = ? AND status = 'SENT'", Integer.class, userId));
+            "SELECT COUNT(*) FROM wishes w JOIN connections c ON c.id = w.connection_id " +
+            "WHERE c.user_id = ? AND w.status = 'SENT'", Integer.class, userId));
         data.put("recentWishes", jdbc.queryForList(
-            "SELECT w.*, c.name AS connection_name FROM wishes w JOIN connections c ON c.id = w.connection_id " +
-            "WHERE w.user_id = ? ORDER BY w.created_at DESC LIMIT 5", userId));
+            "SELECT w.*, c.user_id, c.name AS connection_name FROM wishes w JOIN connections c ON c.id = w.connection_id " +
+            "WHERE c.user_id = ? ORDER BY w.created_at DESC, w.id DESC LIMIT 5", userId));
         return data;
     }
 

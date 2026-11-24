@@ -14,7 +14,7 @@
 
     <groupId>com.wishessender</groupId>
     <artifactId>wishes-sender</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
     <name>WishesSender</name>
     <description>Special-day reminder, wish and gift suggestion system</description>
 

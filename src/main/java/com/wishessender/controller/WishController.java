@@ -3,6 +3,7 @@ package com.wishessender.controller;
 import com.wishessender.service.GeminiService;
 import com.wishessender.util.Auth;
 import com.wishessender.util.Db;
+import com.wishessender.util.Rules;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
@@ -84,7 +85,7 @@ public class WishController {
 
         // Avoid repeating the last wish sent to this person
         List<String> last = jdbc.queryForList(
-            "SELECT text FROM wishes WHERE connection_id = ? ORDER BY created_at DESC LIMIT 1",
+            "SELECT text FROM wishes WHERE connection_id = ? ORDER BY created_at DESC, id DESC LIMIT 1",
             String.class, person.get("id"));
         if (!last.isEmpty()) p.append("Do not repeat this earlier wish: \"").append(last.get(0)).append("\". ");
 
@@ -98,30 +99,47 @@ public class WishController {
         int userId = Auth.userId(session);
         int connectionId = Db.num(b, "connectionId", 0);
         Db.one(jdbc, "SELECT id FROM connections WHERE id = ? AND user_id = ?", connectionId, userId);
-        String eventId = Db.str(b, "eventId");
+
+        // The event (optional) must belong to the same person, otherwise 404
+        Integer eventId = Db.str(b, "eventId") == null ? null : Db.num(b, "eventId", 0);
+        if (eventId != null) {
+            Db.one(jdbc, "SELECT id FROM events WHERE id = ? AND connection_id = ?", eventId, connectionId);
+        }
+
+        // No user_id column: the owner of a wish is the owner of its connection
         int id = Db.insert(jdbc,
-            "INSERT INTO wishes (user_id, connection_id, event_id, tone, language, text, source, status) " +
-            "VALUES (?,?,?,?,?,?,?,?)",
-            userId, connectionId, eventId == null ? null : Integer.valueOf(eventId),
-            Db.str(b, "tone"), Db.str(b, "language"), Db.required(b, "text"),
-            b.getOrDefault("source", "TEMPLATE"), b.getOrDefault("status", "SAVED"));
-        return Db.one(jdbc, "SELECT * FROM wishes WHERE id = ?", id);
+            "INSERT INTO wishes (connection_id, event_id, tone, language, text, source, status) VALUES (?,?,?,?,?,?,?)",
+            connectionId, eventId,
+            Rules.oneOf(Db.str(b, "tone"), Rules.TONES, "tone"),
+            Rules.oneOf(Db.str(b, "language"), Rules.LANGUAGES, "language"),
+            Db.required(b, "text"),
+            Rules.oneOf(orDefault(b, "source", "TEMPLATE"), Rules.WISH_SOURCES, "source"),
+            Rules.oneOf(orDefault(b, "status", "SAVED"), Rules.WISH_STATUSES, "status"));
+        return Db.one(jdbc, "SELECT w.*, c.user_id FROM wishes w JOIN connections c ON c.id = w.connection_id " +
+                            "WHERE w.id = ?", id);
     }
 
     /** Wish history. Optional ?connectionId= to show one person's wishes. */
     @GetMapping
     public List<Map<String, Object>> history(@RequestParam(defaultValue = "0") int connectionId, HttpSession session) {
         return jdbc.queryForList(
-            "SELECT w.*, c.name AS connection_name, e.title AS event_title " +
+            "SELECT w.*, c.user_id, c.name AS connection_name, e.title AS event_title " +
             "FROM wishes w JOIN connections c ON c.id = w.connection_id " +
             "LEFT JOIN events e ON e.id = w.event_id " +
-            "WHERE w.user_id = ? AND (? = 0 OR w.connection_id = ?) ORDER BY w.created_at DESC",
+            "WHERE c.user_id = ? AND (? = 0 OR w.connection_id = ?) ORDER BY w.created_at DESC, w.id DESC",
             Auth.userId(session), connectionId, connectionId);
     }
 
     /** Mark a saved wish as sent. */
     @PostMapping("/{id}/sent")
     public void markSent(@PathVariable int id, HttpSession session) {
-        jdbc.update("UPDATE wishes SET status = 'SENT' WHERE id = ? AND user_id = ?", id, Auth.userId(session));
+        jdbc.update("UPDATE wishes w JOIN connections c ON c.id = w.connection_id SET w.status = 'SENT' " +
+                    "WHERE w.id = ? AND c.user_id = ?", id, Auth.userId(session));
+    }
+
+    /** Text value from the body, or the default when it is missing/empty. */
+    private static String orDefault(Map<String, Object> b, String key, String defaultValue) {
+        String value = Db.str(b, key);
+        return value == null ? defaultValue : value;
     }
 }

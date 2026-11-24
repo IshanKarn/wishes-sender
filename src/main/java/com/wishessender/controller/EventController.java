@@ -2,8 +2,11 @@ package com.wishessender.controller;
 
 import com.wishessender.util.Auth;
 import com.wishessender.util.Db;
+import com.wishessender.util.Rules;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import javax.servlet.http.HttpSession;
 import java.util.List;
@@ -32,14 +35,37 @@ public class EventController {
     public Map<String, Object> create(@PathVariable int connectionId, @RequestBody Map<String, Object> b,
                                       HttpSession session) {
         // Make sure the connection belongs to the logged-in user
-        Db.one(jdbc, "SELECT id FROM connections WHERE id = ? AND user_id = ?", connectionId, Auth.userId(session));
+        Map<String, Object> person = Db.one(jdbc, "SELECT id, name FROM connections WHERE id = ? AND user_id = ?",
+                connectionId, Auth.userId(session));
+
+        // The type must exist in the event_types lookup table
+        String type = Db.required(b, "event_type").toUpperCase();
+        Integer known = jdbc.queryForObject("SELECT COUNT(*) FROM event_types WHERE code = ?", Integer.class, type);
+        if (known == 0) {
+            List<String> codes = jdbc.queryForList("SELECT code FROM event_types ORDER BY sort_order", String.class);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "event_type must be one of: " + String.join(", ", codes));
+        }
+        int yearly = Rules.flag(Db.num(b, "yearly", 1), "yearly");
+
+        // Only one birthday per person (it is also their date of birth)
+        if (type.equals("BIRTHDAY")) {
+            Integer hasBirthday = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM events WHERE connection_id = ? AND event_type = 'BIRTHDAY'", Integer.class, connectionId);
+            if (hasBirthday > 0) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, person.get("name") +
+                    " already has a birthday. Edit the date of birth on their profile instead.");
+            }
+            yearly = 1;   // birthdays always repeat
+        }
+
         int id = Db.insert(jdbc,
             "INSERT INTO events (connection_id, title, event_type, event_date, yearly, description) VALUES (?,?,?,?,?,?)",
-            connectionId, Db.required(b, "title"), Db.required(b, "event_type"), Db.required(b, "event_date"),
-            Db.num(b, "yearly", 1), Db.str(b, "description"));
+            connectionId, Db.required(b, "title"), type, Db.required(b, "event_date"), yearly, Db.str(b, "description"));
         return Db.one(jdbc, "SELECT * FROM v_event_next WHERE id = ?", id);
     }
 
+    /** Deleting the BIRTHDAY event also clears the person's date of birth (it is the same data). */
     @DeleteMapping("/events/{id}")
     public void delete(@PathVariable int id, HttpSession session) {
         jdbc.update("DELETE e FROM events e JOIN connections c ON c.id = e.connection_id " +

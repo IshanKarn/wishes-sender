@@ -21,8 +21,9 @@ public class ReminderScheduler {
     @Scheduled(initialDelay = 5000, fixedRate = 60000)   // 5s after start, then every 60s
     public int checkReminders() {
         String sql =
-            "INSERT IGNORE INTO notifications (user_id, event_id, for_date, days_before, message) " +
-            "SELECT v.user_id, v.id, v.next_date, v.days_left, " +
+            // no user_id: the owner of a notification is found through event -> connection
+            "INSERT IGNORE INTO notifications (event_id, for_date, days_before, message) " +
+            "SELECT v.id,v.next_date, v.days_left, " +
             "       CASE WHEN v.days_left = 0 " +
             "            THEN CONCAT('Today: ', v.title, ' of ', v.connection_name, '!') " +
             "            ELSE CONCAT('In ', v.days_left, ' day(s): ', v.title, ' of ', v.connection_name) END " +

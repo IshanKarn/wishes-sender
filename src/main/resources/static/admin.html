@@ -24,10 +24,14 @@
         <form id="giftForm">
           <div class="row">
             <input name="name" placeholder="Gift name" required style="flex:2">
-            <input name="category" placeholder="Category" required style="flex:1">
+            <select name="category" required style="flex:1">
+              <option>Books</option><option>Electronics</option><option>Home</option><option>Food</option>
+              <option>Flowers</option><option>Clothing</option><option>Experience</option><option>Travel</option>
+              <option>Art</option><option>Sports</option><option>Office</option><option>Other</option>
+            </select>
           </div>
           <div class="row">
-            <input type="number" name="price" placeholder="Price (BDT)" required style="flex:1">
+            <input type="number" name="price" placeholder="Price (BDT)" required min="1" style="flex:1">
             <select name="event_type" style="flex:1">
               <option>ANY</option><option>BIRTHDAY</option><option>ANNIVERSARY</option><option>FESTIVAL</option>
             </select>
@@ -99,16 +103,24 @@
 
   document.getElementById('giftForm').onsubmit = async (e) => {
     e.preventDefault();
-    await api('/api/admin/gifts', 'POST', Object.fromEntries(new FormData(e.target)));
-    e.target.reset();
-    loadGifts();
+    try {
+      await api('/api/admin/gifts', 'POST', Object.fromEntries(new FormData(e.target)));
+      e.target.reset();
+      loadGifts();
+    } catch (err) {
+      toast(err.message);
+    }
   };
 
   document.getElementById('festForm').onsubmit = async (e) => {
     e.preventDefault();
-    await api('/api/admin/festivals', 'POST', Object.fromEntries(new FormData(e.target)));
-    e.target.reset();
-    loadFestivals();
+    try {
+      await api('/api/admin/festivals', 'POST', Object.fromEntries(new FormData(e.target)));
+      e.target.reset();
+      loadFestivals();
+    } catch (err) {
+      toast(err.message);
+    }
   };
 
   function loadAll() {

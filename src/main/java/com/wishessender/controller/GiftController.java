@@ -14,6 +14,10 @@ import java.util.Map;
 @RequestMapping("/api/gifts")
 public class GiftController {
 
+    /** event_type NULL means "any event"; the API keeps showing it as "ANY" like in v1.0. */
+    public static final String GIFT_COLUMNS =
+        "g.id, g.name, g.category, g.price, COALESCE(g.event_type, 'ANY') AS event_type, g.tag, g.reason";
+
     private final JdbcTemplate jdbc;
 
     public GiftController(JdbcTemplate jdbc) {
@@ -34,9 +38,9 @@ public class GiftController {
         String interests = person.get("interests") == null ? "" : person.get("interests").toString().toLowerCase();
 
         return jdbc.queryForList(
-            "SELECT g.*, (? LIKE CONCAT('%', g.tag, '%')) AS matches_interest " +
+            "SELECT " + GIFT_COLUMNS + ", (? LIKE CONCAT('%', g.tag, '%')) AS matches_interest " +
             "FROM gifts g " +
-            "WHERE g.price BETWEEN ? AND ? AND (g.event_type = 'ANY' OR g.event_type = ?) " +
+            "WHERE g.price BETWEEN ? AND ? AND (g.event_type IS NULL OR g.event_type = ?) " +
             "ORDER BY matches_interest DESC, g.price " +
             "LIMIT 6",
             interests, person.get("gift_min"), person.get("gift_max"), eventType);

@@ -2,8 +2,11 @@ package com.wishessender.controller;
 
 import com.wishessender.util.Auth;
 import com.wishessender.util.Db;
+import com.wishessender.util.Rules;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import javax.servlet.http.HttpSession;
 import java.util.HashMap;
@@ -51,15 +54,30 @@ public class AdminController {
     @GetMapping("/gifts")
     public List<Map<String, Object>> gifts(HttpSession session) {
         Auth.requireAdmin(session);
-        return jdbc.queryForList("SELECT * FROM gifts ORDER BY id DESC");
+        return jdbc.queryForList("SELECT " + GiftController.GIFT_COLUMNS + " FROM gifts g ORDER BY g.id DESC");
     }
 
     @PostMapping("/gifts")
     public void addGift(@RequestBody Map<String, Object> b, HttpSession session) {
         Auth.requireAdmin(session);
+        int price = Db.num(b, "price", 0);
+        if (price <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Price must be greater than 0");
+        }
+        // "ANY" (or empty) is stored as NULL = suits any event; other values must exist in event_types
+        String type = Db.str(b, "event_type");
+        if (type == null || type.equalsIgnoreCase("ANY")) {
+            type = null;
+        } else {
+            type = type.toUpperCase();
+            Integer known = jdbc.queryForObject("SELECT COUNT(*) FROM event_types WHERE code = ?", Integer.class, type);
+            if (known == 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown event_type: " + type);
+            }
+        }
         jdbc.update("INSERT INTO gifts (name, category, price, event_type, tag, reason) VALUES (?,?,?,?,?,?)",
-            Db.required(b, "name"), Db.required(b, "category"), Db.num(b, "price", 0),
-            b.getOrDefault("event_type", "ANY"), Db.required(b, "tag").toLowerCase(), Db.required(b, "reason"));
+            Db.required(b, "name"), Rules.oneOf(Db.required(b, "category"), Rules.GIFT_CATEGORIES, "category"),
+            price, type, Db.required(b, "tag").toLowerCase(), Db.required(b, "reason"));
     }
 
     @DeleteMapping("/gifts/{id}")
@@ -78,9 +96,11 @@ public class AdminController {
     @PostMapping("/festivals")
     public void addFestival(@RequestBody Map<String, Object> b, HttpSession session) {
         Auth.requireAdmin(session);
+        String religion = Db.str(b, "religion") == null ? "All" : Db.str(b, "religion");
+        String region = Db.str(b, "region") == null ? "Bangladesh" : Db.str(b, "region");
         jdbc.update("INSERT INTO festivals (name, festival_date, religion, region) VALUES (?,?,?,?)",
             Db.required(b, "name"), Db.required(b, "festival_date"),
-            b.getOrDefault("religion", "All"), b.getOrDefault("region", "Bangladesh"));
+            Rules.oneOf(religion, Rules.FESTIVAL_RELIGIONS, "religion"), region);
     }
 
     @DeleteMapping("/festivals/{id}")

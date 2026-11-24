@@ -122,10 +122,14 @@
 
   async function addFestival(i) {
     const f = festivals[i];
-    await api('/api/connections/' + id + '/events', 'POST',
-      { title: f.name, event_type: 'FESTIVAL', event_date: String(f.festival_date).substring(0, 10), yearly: 0 });
-    toast(f.name + ' added');
-    loadEvents();
+    try {
+      await api('/api/connections/' + id + '/events', 'POST',
+        { title: f.name, event_type: 'FESTIVAL', event_date: String(f.festival_date).substring(0, 10), yearly: 0 });
+      toast(f.name + ' added');
+      loadEvents();
+    } catch (err) {
+      toast(err.message);
+    }
   }
 
   async function loadGifts() {
@@ -146,18 +150,24 @@
   document.getElementById('eventForm').onsubmit = async (e) => {
     e.preventDefault();
     const f = e.target.elements;   // the inputs, by name
-    await api('/api/connections/' + id + '/events', 'POST', {
-      title: f['title'].value, event_type: f['event_type'].value,
-      event_date: f['event_date'].value, yearly: f['yearly'].checked ? 1 : 0
-    });
-    e.target.reset();
-    toast('Event added');
-    loadEvents();
+    try {
+      await api('/api/connections/' + id + '/events', 'POST', {
+        title: f['title'].value, event_type: f['event_type'].value,
+        event_date: f['event_date'].value, yearly: f['yearly'].checked ? 1 : 0
+      });
+      e.target.reset();
+      toast('Event added');
+      loadPerson();   // adding a birthday also sets the date of birth
+      loadEvents();
+    } catch (err) {
+      toast(err.message);   // e.g. "... already has a birthday"
+    }
   };
 
   async function deleteEvent(eventId) {
     if (!confirm('Delete this event?')) return;
     await api('/api/events/' + eventId, 'DELETE');
+    loadPerson();   // deleting the birthday also clears the date of birth
     loadEvents();
   }
 

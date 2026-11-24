@@ -51,7 +51,11 @@ public class Db {
         if (value == null) return defaultValue;
         if (value.equals("true")) return 1;
         if (value.equals("false")) return 0;
-        return (int) Double.parseDouble(value);
+        try {
+            return (int) Double.parseDouble(value);
+        } catch (NumberFormatException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, key + " must be a number");
+        }
     }
 
     /** Reads a required text value, or sends 400. */

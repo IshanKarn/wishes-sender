@@ -2,6 +2,7 @@ package com.wishessender.controller;
 
 import com.wishessender.util.Auth;
 import com.wishessender.util.Db;
+import com.wishessender.util.Rules;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
@@ -29,8 +30,11 @@ public class SettingsController {
     @PutMapping
     public Map<String, Object> update(@RequestBody Map<String, Object> b, HttpSession session) {
         jdbc.update("UPDATE users SET name = ?, ai_enabled = ?, share_details = ?, remind_days_before = ? WHERE id = ?",
-            Db.required(b, "name"), Db.num(b, "ai_enabled", 1), Db.num(b, "share_details", 1),
-            Db.num(b, "remind_days_before", 1), Auth.userId(session));
+            Db.required(b, "name"),
+            Rules.flag(Db.num(b, "ai_enabled", 1), "ai_enabled"),
+            Rules.flag(Db.num(b, "share_details", 1), "share_details"),
+            Rules.range(Db.num(b, "remind_days_before", 1), 0, Rules.MAX_REMIND_DAYS, "remind_days_before"),
+            Auth.userId(session));
         return get(session);
     }
 }

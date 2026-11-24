@@ -1,4 +1,4 @@
-﻿# WishesSender v1 (MVP)
+﻿# WishesSender v1.1 (MVP)
 
 **A smart special-day reminder, wish and gift suggestion system.**
 CSE 224 – Database Management System Lab project.
@@ -39,7 +39,7 @@ custom reminder times, Spring Security.
 ## 2. Requirements
 
 1. **Java JDK 8 or newer** (`java -version`)
-2. **MySQL 8** (MySQL Server + MySQL Workbench is easiest) – or XAMPP's MySQL/MariaDB
+2. **MySQL 8.0.16 or newer** (Docker `mysql:8.0`, or MySQL Server + Workbench) – CHECK constraints need 8.0.16+
 3. **IntelliJ IDEA** (recommended – it has Maven built in) or Maven installed
 4. *(Optional)* a **Gemini API key** – free from <https://aistudio.google.com/apikey>
 
@@ -123,6 +123,7 @@ wishes-sender-v1
     ├── java/com/wishessender
     │   ├── WishesSenderApplication.java     main() – starts the app + scheduler
     │   ├── config/DataSeeder.java           creates the default admin
+    │   ├── config/SchemaMigrator.java       upgrades a v1.0 database (runs once, safe to re-run)
     │   ├── controller/                      REST API (one file per module)
     │   │   ├── AuthController.java          /api/auth/*
     │   │   ├── ConnectionController.java    /api/connections
@@ -136,10 +137,11 @@ wishes-sender-v1
     │   ├── service/
     │   │   ├── GeminiService.java           calls the Gemini REST API
     │   │   └── ReminderScheduler.java       @Scheduled job → notifications
-    │   └── util/Auth.java, Db.java          small helpers
+    │   ├── controller/LookupController.java /api/lookups (allowed values)
+    │   └── util/Auth, Db, Rules, ApiErrorHandler   helpers, validation, error messages
     └── resources
         ├── application.properties           DB + Gemini settings
-        ├── schema.sql                       8 tables + 4 views
+        ├── schema.sql                       9 tables + 4 views + constraints
         ├── data.sql                         festivals, templates, gift catalog
         └── static/                          the website (HTML/CSS/JS)
             ├── index.html  home.html  people.html  person.html  wish.html
@@ -152,20 +154,31 @@ wishes-sender-v1
 
 ## 7. Database design
 
-**Tables:** `users`, `connections`, `events`, `festivals`, `notifications`, `wish_templates`, `wishes`, `gifts`
+**Tables:** `users`, `connections`, `event_types`, `events`, `festivals`, `notifications`, `wish_templates`, `wishes`, `gifts`
 
 **Relationships:**
 - `users` 1 — N `connections` 1 — N `events`
-- `users` 1 — N `wishes` N — 1 `connections`, `wishes` N — 1 `events` (optional)
-- `users` 1 — N `notifications` N — 1 `events`
-- All foreign keys use `ON DELETE CASCADE` (deleting a person removes their events, wishes, reminders).
+- `connections` 1 — N `wishes`, `wishes` N — 1 `events` (optional, must be the same person's event)
+- `events` 1 — N `notifications`
+- `event_types` 1 — N `events`, `gifts`, `wish_templates` (lookup table, `gifts.event_type` NULL = any event)
+- The owner of a wish / notification is found through `connections.user_id` – no copied `user_id` columns.
+- The date of birth is the connection's BIRTHDAY event (the API still returns it as `dob`).
+- Foreign keys from child rows use `ON DELETE CASCADE` (deleting a user or person removes their events, wishes, reminders).
 
 **Views:**
 - `v_event_next` – every event with its next yearly date and `days_left` (used by dashboard, reminders, scheduler)
 - `v_connections_by_relation`, `v_events_per_month`, `v_wishes_by_event_type` – reports
 
-**Constraints / indexes:** unique email, unique `(event_id, for_date, days_before)` on notifications
-(so a reminder is never created twice), indexes on `connections.user_id`, `connections.name`, `events.event_date`.
+**Constraints / indexes:**
+- Unique: user email; `(user_id, name)` on connections; one birthday per connection (`events.birthday_of`);
+  `(event_id, for_date, days_before)` on notifications (a reminder is never created twice).
+- CHECK: allowed values for relation, gender, religion, role, tone, language, source, status, gift category,
+  festival religion; `gift_min >= 0`, `gift_max >= gift_min`, `price > 0`, `yearly` / flags 0 or 1,
+  `days_before` and `remind_days_before` 0–30.
+- Indexes on `connections.user_id`, `connections.name`, `events.event_date`.
+
+The allowed values live in `util/Rules.java` (backend validation and `GET /api/lookups`) and in the CHECK
+constraints of `schema.sql` (the database's own guard). Change both together.
 
 The scheduler is a single SQL statement:
 `INSERT IGNORE INTO notifications ... SELECT ... FROM v_event_next WHERE days_left = 0 OR days_left = remind_days_before`.
@@ -182,3 +195,19 @@ The scheduler is a single SQL statement:
 | Wish always says "used a template" | `GEMINI_API_KEY` is not set in the window/run config that starts the app, or AI is turned off in Settings. |
 | Gemini model error | Set another model, e.g. `$env:GEMINI_MODEL="gemini-2.0-flash"`. |
 | Want a clean database | In MySQL Workbench: `DROP DATABASE wishes_sender;` then restart the app. |
+| `409` "You already have a connection named ..." | Names are unique per user – add something like "Rahul (Office)". |
+| `409` "... already has a birthday" | A person has one birthday – change the date of birth with **Edit** on their profile. |
+| `Check constraint '...' is violated` at start | Run on MySQL **8.0.16+** (older versions do not support CHECK). |
+
+---
+
+## 9. Upgrading from v1.0.0
+
+v1.1.0 changes the database design (see `CHANGELOG.md`). Your data is upgraded **automatically** on the
+first start – look for `[migration] ...` lines in the console. Take a backup first:
+
+```powershell
+docker exec wishes-mysql mysqldump -uroot -proot wishes_sender > backup-v1.0.sql
+```
+
+To roll back: `Get-Content backup-v1.0.sql | docker exec -i wishes-mysql mysql -uroot -proot wishes_sender`, then run v1.0.0.
